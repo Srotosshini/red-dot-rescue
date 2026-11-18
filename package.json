@@ -1,0 +1,18 @@
+{
+  "name": "red-dot-rescue",
+  "private": true,
+  "version": "1.0.0",
+  "description": "A low-poly Three.js game: you are a laser pointer leading kittens to safety before a storm.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "vite": "^8.3.8"
+  }
+}
