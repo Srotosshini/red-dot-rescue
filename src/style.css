@@ -969,6 +969,115 @@ html[data-screen='play'] #game {
   }
 }
 
+/* ---- short screens: a phone on its side, or the game running inside a
+   portfolio cabinet screen (an iframe only a few hundred pixels tall) ---------------------------------- */
+@media (max-height: 520px) {
+  .screen {
+    padding: 8px;
+  }
+  .title {
+    justify-items: start;
+    text-align: left;
+    align-content: center;
+    gap: 10px;
+    padding: 12px 18px;
+    background: linear-gradient(90deg, rgba(10, 14, 28, 0.62), rgba(10, 14, 28, 0) 75%);
+  }
+  .logo h1 {
+    font-size: clamp(1.7rem, 9vh, 3rem);
+    max-width: 9ch;
+  }
+  .logo p {
+    margin: 6px 0 0;
+    max-width: 30ch;
+    font-size: 0.85rem;
+  }
+  .title .menu {
+    width: min(240px, 58vw);
+    gap: 8px;
+  }
+  .title .toggles {
+    justify-content: flex-start;
+  }
+  .tease {
+    display: none;
+  }
+  .btn {
+    min-height: 36px;
+    padding: 0.4em 1.1em;
+    font-size: 0.9rem;
+  }
+  .toggle {
+    padding: 0.3em 0.7em 0.3em 0.5em;
+    font-size: 0.75rem;
+  }
+  .panel,
+  .side .panel {
+    max-height: calc(100vh - 16px);
+    padding: 14px 18px;
+    border-radius: 18px;
+  }
+  .panel h2 {
+    font-size: 1.4rem;
+  }
+  .row {
+    margin-top: 12px;
+  }
+  .hud-top {
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas: none;
+    gap: 8px;
+  }
+  .count,
+  .storm,
+  .round {
+    grid-area: auto;
+  }
+  .chip,
+  .storm {
+    padding: 4px 10px;
+    box-shadow: 0 2px 0 var(--ink);
+  }
+  .count .n {
+    font-size: 1rem;
+  }
+  .count .need {
+    display: none;
+  }
+  .round {
+    width: 36px;
+    height: 36px;
+  }
+  .wind {
+    top: 52px;
+  }
+  .hint {
+    bottom: 8px;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+  }
+  .stars.big .star {
+    width: 36px;
+    height: 36px;
+  }
+  .polaroid {
+    width: 112px;
+  }
+  .level-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+  }
+  .level-card {
+    padding: 10px 12px;
+  }
+  .level-card .blurb {
+    display: none;
+  }
+}
+
 /* ---- motion ---------------------------------------------------------------------------------------- */
 @keyframes fade {
   from {
