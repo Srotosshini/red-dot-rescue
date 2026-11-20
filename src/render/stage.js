@@ -1,7 +1,8 @@
 // The renderer, the scene, the lights and the post-processing chain.
-//   high:   bloom on the laser dot, tilt-shift blur, vignette, 4x MSAA
-//   medium: bloom and vignette, no tilt-shift, lower resolution
-//   low:    straight to the screen, no post-processing
+//   high:   bloom on the laser dot, tilt-shift blur in the levels, depth of
+//           field on the menu, vignette, 4x MSAA
+//   medium: bloom and vignette, no tilt-shift or depth of field, lower resolution
+//   low:    straight to the screen, no post-processing ("pretty mode" off)
 // It starts on a guess for the device and steps down by itself if the frame
 // rate cannot keep up.
 import * as THREE from 'three'
@@ -10,6 +11,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
+import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js'
 
 export const QUALITY = {
   low: { dpr: 1, post: false, tilt: false, msaa: 0, shadow: 1024 },
@@ -24,6 +26,117 @@ const quadVertex = /* glsl */ `
     vUv = uv;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }`
+
+// Depth of field for the menu: the scene's depth is drawn into a small target,
+// then every pixel is blurred by how far it sits from the focus distance (a
+// spiral of samples, each weighted so sharp things in front do not smear into
+// the blur behind them). Whatever is well behind the focus is also muted a
+// little toward a warm grey, so the soft yard never competes with the set.
+const Dof = {
+  uniforms: {
+    tColor: { value: null },
+    tDepth: { value: null },
+    focus: { value: 8 },
+    near: { value: 0.1 },
+    far: { value: 400 },
+    amount: { value: 8 }, // biggest blur radius, in pixels
+    grade: { value: 1 },
+    texel: { value: new THREE.Vector2(0.001, 0.001) },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }`,
+  fragmentShader: /* glsl */ `
+    #include <packing>
+    uniform sampler2D tColor;
+    uniform sampler2D tDepth;
+    uniform float focus;
+    uniform float near;
+    uniform float far;
+    uniform float amount;
+    uniform float grade;
+    uniform vec2 texel;
+    varying vec2 vUv;
+    float distanceAt(vec2 uv) {
+      return -perspectiveDepthToViewZ(unpackRGBAToDepth(texture2D(tDepth, uv)), near, far);
+    }
+    float behind(float z) { return smoothstep(1.2, 7.0, z - focus); }
+    float blurAt(float z) { return max(behind(z), smoothstep(0.9, 3.0, focus - z) * 0.6); }
+    void main() {
+      vec4 base = texture2D(tColor, vUv);
+      float z = distanceAt(vUv);
+      float c = blurAt(z);
+      vec3 sum = base.rgb;
+      float total = 1.0;
+      if (c > 0.01) {
+        for (int i = 1; i < 24; i++) {
+          float k = float(i);
+          float r = sqrt(k / 24.0) * c * amount;
+          float a = k * 2.39996;
+          vec2 uv = vUv + vec2(cos(a), sin(a)) * r * texel;
+          float w = clamp(blurAt(distanceAt(uv)) / max(c, 0.001), 0.0, 1.0);
+          sum += texture2D(tColor, uv).rgb * w;
+          total += w;
+        }
+      }
+      vec3 col = sum / total;
+      float l = dot(col, vec3(0.299, 0.587, 0.114));
+      col = mix(col, l * vec3(1.06, 0.98, 0.88), grade * behind(z) * 0.45);
+      gl_FragColor = vec4(col, base.a);
+    }`,
+}
+
+class DofPass extends Pass {
+  constructor(scene, camera) {
+    super()
+    this.scene = scene
+    this.camera = camera
+    this.depth = new THREE.WebGLRenderTarget(1, 1)
+    // both sides: paper turned over shows the camera its back faces
+    this.depthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, blending: THREE.NoBlending, side: THREE.DoubleSide })
+    this.uniforms = THREE.UniformsUtils.clone(Dof.uniforms)
+    this.material = new THREE.ShaderMaterial({ uniforms: this.uniforms, vertexShader: Dof.vertexShader, fragmentShader: Dof.fragmentShader })
+    this.quad = new FullScreenQuad(this.material)
+    this.clear = new THREE.Color()
+  }
+
+  setSize(width, height) {
+    // depth at half size is plenty to decide how blurry a pixel is
+    this.depth.setSize(Math.max(1, Math.round(width / 2)), Math.max(1, Math.round(height / 2)))
+    this.uniforms.texel.value.set(1 / width, 1 / height)
+  }
+
+  render(renderer, writeBuffer, readBuffer) {
+    const oldClear = renderer.getClearColor(this.clear)
+    const oldAlpha = renderer.getClearAlpha()
+    const oldAuto = renderer.autoClear
+    renderer.autoClear = false
+    this.scene.overrideMaterial = this.depthMaterial
+    renderer.setRenderTarget(this.depth)
+    renderer.setClearColor(0xffffff, 1)
+    renderer.clear()
+    renderer.render(this.scene, this.camera)
+    this.scene.overrideMaterial = null
+    renderer.setClearColor(oldClear, oldAlpha)
+    renderer.autoClear = oldAuto
+    this.uniforms.tColor.value = readBuffer.texture
+    this.uniforms.tDepth.value = this.depth.texture
+    this.uniforms.near.value = this.camera.near
+    this.uniforms.far.value = this.camera.far
+    renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer)
+    this.quad.render(renderer)
+  }
+
+  dispose() {
+    this.depth.dispose()
+    this.depthMaterial.dispose()
+    this.material.dispose()
+    this.quad.dispose()
+  }
+}
 
 // One direction of a 9-tap Gaussian, stronger the further a pixel is from the
 // sharp band around the dot: the miniature look.
@@ -176,6 +289,8 @@ export function createStage(canvas) {
   let q = QUALITY.high
   let composer = null
   let passes = null
+  let tiltPx = 1.5
+  let dofPx = 9
 
   function buildComposer() {
     composer?.dispose()
@@ -185,19 +300,22 @@ export function createStage(canvas) {
     const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: q.msaa })
     composer = new EffectComposer(renderer, rt)
     const render = new RenderPass(scene, camera)
+    const dof = new DofPass(scene, camera)
     const bloom = new UnrealBloomPass(new THREE.Vector2(width, height), 0.85, 0.55, 1.45)
     const tiltH = new ShaderPass(TiltShift)
     const tiltV = new ShaderPass(TiltShift)
     const finish = new ShaderPass(Finish)
     const output = new OutputPass()
     tiltH.enabled = tiltV.enabled = q.tilt
+    dof.enabled = false
     composer.addPass(render)
+    composer.addPass(dof)
     composer.addPass(bloom)
     composer.addPass(tiltH)
     composer.addPass(tiltV)
     composer.addPass(finish)
     composer.addPass(output)
-    passes = { render, bloom, tiltH, tiltV, finish }
+    passes = { render, dof, bloom, tiltH, tiltV, finish }
     sizeComposer()
   }
 
@@ -206,11 +324,12 @@ export function createStage(canvas) {
     composer.setPixelRatio(renderer.getPixelRatio())
     composer.setSize(width, height)
     const pr = renderer.getPixelRatio()
+    dofPx = 9 * pr * Math.min(1.6, height / 800)
     passes.tiltH.uniforms.stepSize.value.set(1 / (width * pr), 0)
     passes.tiltV.uniforms.stepSize.value.set(0, 1 / (height * pr))
     passes.finish.uniforms.aspect.value = width / height
     // the blur is measured in pixels, so keep it the same size on a sharper screen
-    passes.tiltH.uniforms.amount.value = passes.tiltV.uniforms.amount.value = 1.5 * pr
+    tiltPx = 1.5 * pr
   }
 
   function setQuality(name) {
@@ -233,6 +352,9 @@ export function createStage(canvas) {
     vignette: 0.45,
     tint: new THREE.Color(1, 1, 1),
     focus: 0.5,
+    tilt: 1, // how much tilt-shift blur; the menu turns it off
+    dof: 0, // how much depth of field (the menu's), on the best quality only
+    focusDistance: 8, // from the camera, in world units
   }
 
   // frame-rate watch for the automatic step down
@@ -256,9 +378,12 @@ export function createStage(canvas) {
     onDowngrade(fn) {
       onDowngrade = fn
     },
+    // the menu has its own camera; swapping keeps the post-processing chain
     setCamera(cam) {
+      if (cam === camera) return
       camera = cam
-      buildComposer()
+      if (passes) passes.render.camera = passes.dof.camera = cam
+      else buildComposer()
     },
     resize(w, h) {
       width = Math.max(1, w)
@@ -305,7 +430,18 @@ export function createStage(canvas) {
         f.vignette.value = mood.vignette
         f.tint.value.copy(mood.tint)
         f.time.value = time
-        passes.tiltH.uniforms.focus.value = passes.tiltV.uniforms.focus.value = mood.focus
+        const dof = q.tilt && mood.dof > 0.01
+        passes.dof.enabled = dof
+        if (dof) {
+          passes.dof.uniforms.focus.value = mood.focusDistance
+          passes.dof.uniforms.amount.value = dofPx * mood.dof
+        }
+        const tilt = q.tilt && mood.tilt > 0.01
+        passes.tiltH.enabled = passes.tiltV.enabled = tilt
+        if (tilt) {
+          passes.tiltH.uniforms.amount.value = passes.tiltV.uniforms.amount.value = tiltPx * mood.tilt
+          passes.tiltH.uniforms.focus.value = passes.tiltV.uniforms.focus.value = mood.focus
+        }
         composer.render()
       } else {
         renderer.render(scene, camera)

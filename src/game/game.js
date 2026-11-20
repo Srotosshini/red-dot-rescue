@@ -2,6 +2,7 @@
 // dot, keeps the kittens' path-finding field fresh, and turns what happens
 // into hints, sounds, results and adoption cards. On the title screen the
 // same machinery runs a demo in the backyard with a dot that moves by itself.
+import { strings } from '../strings.js'
 import * as THREE from 'three'
 import { clamp, damp, dist } from '../core/mathx.js'
 import { makeRng, newSeed } from '../core/rng.js'
@@ -15,38 +16,10 @@ import { Laser } from './laser.js'
 import { Box, Basket, Food, Vacuum, Flutter, Gate, Cup, Hideout, Flood, Channel } from './objects.js'
 
 const touch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
-const move = touch ? 'Drag your finger' : 'Move your pointer'
+const move = touch ? strings.play.move.touch : strings.play.move.mouse
 
-const START = {
-  backyard: `You are the laser pointer. ${move} to shine the dot, then lead the kittens to the basket on the deck.`,
-  rooftops: 'Watch out for puddles and gusts. The box on the clothesline carries kittens across the big gap.',
-  kitchen: 'The basket is behind the baby gate, and the gate is shut. Look at what is balanced on the edge of the island.',
-  drain: 'It is dark down here. Kittens’ eyes catch the laser light, and hidden ones meow louder as the dot gets close.',
-  shelter: 'The yard is going to flood. Get kittens up onto the walkways and the porch before the water rises.',
-}
-const TIPS = {
-  lead: 'Kittens chase the dot. Lead them into the basket.',
-  box: 'Kittens cannot resist a box. Hold the dot on the box to call one out.',
-  ride: 'That box moves! Call the kitten out once it reaches the other side.',
-  vacuumRide: 'A kitten is riding the vacuum. Call it out of the box when it gets somewhere useful.',
-  hidden: 'Hear that? Someone is hiding. Bring the dot close: the meows get louder the nearer it gets.',
-  found: 'Found one!',
-  sleepy: TRAITS.sleepy.tip,
-  shy: TRAITS.shy.tip,
-  greedy: TRAITS.greedy.tip,
-  chaotic: TRAITS.chaotic.tip,
-  puddle: 'Kittens will not set a paw in a puddle. Lead them around it.',
-  butterfly: 'Everyone freezes for a butterfly. Wiggle the dot on a kitten to snap it out of it.',
-  moth: 'The moth by the lamp is hypnotic. Wiggle the dot on a staring kitten to break the spell.',
-  wind: 'Gust coming! Kittens out in the open get pushed. Behind a chimney or a wall they are safe.',
-  vacuum: 'The vacuum is terrifying. But put the dot on the box on top of it, and a kitten will hop on for a ride.',
-  cup: 'That gate has a pedal. Something knocked off the island would land right on it.',
-  swat: 'Cats will knock anything off an edge.',
-  swim: 'A kitten is swimming! It will paddle for the nearest dry spot.',
-  boats: 'The boxes are floating! Kittens sitting in them drift with the water.',
-  flood: 'The water is rising. The raised walkways and the porch stay dry.',
-  storm: 'The storm is almost here!',
-}
+// tips, shown at most twice each; the trait ones come with the traits
+const TIPS = { ...strings.play.tips, sleepy: TRAITS.sleepy.tip, shy: TRAITS.shy.tip, greedy: TRAITS.greedy.tip, chaotic: TRAITS.chaotic.tip }
 
 const _ray = new THREE.Raycaster()
 const _ndc = new THREE.Vector2()
@@ -78,20 +51,28 @@ export class Game {
   }
 
   // ---- building a rescue -----------------------------------------------------------------
-  load(id, { demo = false } = {}) {
+  // demo: kittens chase a dot that moves by itself (behind the level list).
+  // menu: just the scenery and the weather, as the backdrop for the menu.
+  load(id, { demo = false, menu = false } = {}) {
     this.unload()
     const index = Math.max(0, LEVELS.findIndex((l) => l.id === id))
     const def = LEVELS[index]
     this.def = def
     this.index = index
     this.demo = demo
-    const rand = (this.rand = makeRng(demo ? 4242 : newSeed()))
+    this.menu = menu
+    const rand = (this.rand = makeRng(demo || menu ? 4242 : newSeed()))
     const level = (this.level = buildLevel(def, makeRng(index * 977 + 13)))
     const grid = (this.grid = level.grid)
     this.root.add(level.group)
     const centre = level.bounds.getCenter(new THREE.Vector3())
     this.stage.frameLight(centre, Math.hypot(def.size[0], def.size[1]) * 0.55 + 1)
     this.weather.setLevel(level, rand)
+    // the cloud ring is made for looking down on the diorama. For the menu's
+    // low camera it is pushed far out and up, into a bank of storm cloud on
+    // the horizon; it only shows where depth of field softens it (sharp, it
+    // reads as a wall of rocks)
+    if (this.weather.clouds) this.weather.clouds.scale.set(menu ? 3.2 : 1, menu ? 1.9 : 1, menu ? 3.2 : 1)
     const dark = !!level.theme.dark
 
     const add = (o) => {
@@ -100,12 +81,12 @@ export class Game {
     }
     this.boxes = []
     this.byId = {}
-    for (const b of def.boxes ?? []) {
+    for (const b of menu ? [] : def.boxes ?? []) {
       const box = add(new Box(b, grid, rand.int(1, 9999)))
       this.boxes.push(box)
       this.byId[b.id] = box
     }
-    this.vacuums = (def.vacuums ?? []).map((v) => {
+    this.vacuums = (menu ? [] : def.vacuums ?? []).map((v) => {
       const vac = add(new Vacuum(v, grid))
       add(vac.box)
       this.boxes.push(vac.box)
@@ -123,7 +104,7 @@ export class Game {
     // kittens: new ones every attempt, so every rescue fills the album differently
     this.kittens = []
     const names = new Set()
-    const slots = demo ? DEMO.kittens.map((at, i) => ({ at, trait: ['plain', 'chaotic', 'plain', 'shy', 'plain', 'greedy', 'plain'][i] })) : def.kittens
+    const slots = menu ? [] : demo ? DEMO.kittens.map((at, i) => ({ at, trait: ['plain', 'chaotic', 'plain', 'shy', 'plain', 'greedy', 'plain'][i] })) : def.kittens
     for (const slot of slots) {
       const g = makeGenome((rand() * 4294967296) >>> 0, slot.trait ?? 'plain', names)
       names.add(g.name)
@@ -171,8 +152,8 @@ export class Game {
     this.nextId = null
     this.t = 0
     this.cam.tight = false
-    this.cam.frame(level.bounds, { intro: !demo })
-    this.state = demo ? 'demo' : 'intro'
+    this.cam.frame(level.bounds, { intro: !demo && !menu })
+    this.state = menu ? 'menu' : demo ? 'demo' : 'intro'
     this.world = {
       t: 0,
       dt: 0,
@@ -249,7 +230,8 @@ export class Game {
       }
       if (this.left < 30) this.tip('storm')
     }
-    this.storm = this.state === 'demo' ? 0.12 : clamp(1 - this.left / this.time, 0, 1)
+    this.storm = this.state === 'demo' || this.state === 'menu' ? 0.12 : clamp(1 - this.left / this.time, 0, 1)
+    if (this.weather.clouds) this.weather.clouds.visible = this.state !== 'menu' || this.stage.quality === 'high'
     if (this.state === 'ending' && !this.ending.win) this.storm = 1
     this.updateDot(dt)
     this.tickWorld(dt, true)
@@ -268,7 +250,7 @@ export class Game {
     w.t = this.t
     w.dt = dt
     w.storm = this.storm
-    const active = this.state === 'playing' || this.state === 'demo'
+    const active = this.state === 'playing' || this.state === 'demo' || this.state === 'menu'
     if (this.weather.update(dt, { storm: this.storm, t: this.t, rand: this.rand, active }) && live) {
       const power = 0.45 + this.storm * 0.55
       this.sound.thunder(0.25 + this.rand() * 1.1, power)
@@ -431,12 +413,12 @@ export class Game {
         this.laser.ping()
         const p = this.screen(k.x, k.y + 0.7, k.z)
         if (p) {
-          this.ui.floatText(`${k.name} is home!`, p.x, p.y)
+          this.ui.floatText(strings.play.home(k.name), p.x, p.y)
           this.ui.burst(p.x, p.y, 9)
         }
-        this.ui.announce(`${k.name} is safe. ${this.rescued} of ${this.kittens.length} home.`)
+        this.ui.announce(strings.play.safe(k.name, this.rescued, this.kittens.length))
         if (this.state === 'playing' && this.rescued >= this.kittens.length) this.finish(true)
-        else if (this.state === 'playing' && this.rescued === this.def.need && this.rescued < this.kittens.length) this.queueHint('That is enough to pass. Every extra kitten earns another star.')
+        else if (this.state === 'playing' && this.rescued === this.def.need && this.rescued < this.kittens.length) this.queueHint(strings.play.enough)
         break
       }
       case 'reveal':
@@ -479,7 +461,7 @@ export class Game {
         this.tip('swat')
         break
       case 'gate':
-        this.queueHint('The gate swung open! Now lead them through.', true)
+        this.queueHint(strings.play.gate, true)
         this.sound.ui('start')
         break
       case 'swim':
@@ -492,11 +474,11 @@ export class Game {
   }
 
   tip(id) {
-    if (this.demo || this.tipsShown.has(id)) return
+    if (this.demo || this.menu || this.tipsShown.has(id)) return
     this.tipsShown.add(id)
     const seen = this.save.seen[id] ?? 0
     if (id !== 'start' && id !== 'storm' && seen >= 2) return
-    const text = id === 'start' ? START[this.def.id] : TIPS[id]
+    const text = id === 'start' ? strings.play.start[this.def.id]?.(move) : TIPS[id]
     if (!text) return
     this.save.seen[id] = seen + 1
     this.queueHint(text)
@@ -587,7 +569,7 @@ export class Game {
   }
 
   frameUI(dt) {
-    if (!this.level) return
+    if (!this.level || this.state === 'menu') return
     const items = []
     for (const k of this.kittens) {
       if (!k.emote || !k.visible) continue

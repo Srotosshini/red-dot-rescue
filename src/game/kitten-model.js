@@ -262,6 +262,8 @@ export function newPose() {
     earFlat: 0, twitchL: 0, twitchR: 0,
     blink: 0, eyesClosed: 0, breath: 0,
     tailUp: 0.4, tailWag: 0.15, tailSway: 0, tailCurl: 0, tailPuff: 0,
+    // on the menu's scratching post (see poseKitten)
+    hang: 0, cling: 0, climb: 0, kick: 0, bat: 0,
   }
 }
 
@@ -275,12 +277,16 @@ export function poseKitten(rig, a) {
   const settle = Math.max(a.sit, a.loaf, a.swim)
   const stride = a.stride * (1 - settle)
 
+  // on a post the kitten is turned nose-up by whoever places it, so "along
+  // the spine" is up: squash runs that way, and the limbs reach and grip
+  const post = clamp(a.hang + a.cling, 0, 1)
+
   // root: bob, crouch, settling down, squash and stretch
   const bob = Math.abs(Math.sin(a.phase)) * 0.018 * stride * (1 - a.run * 0.6) + Math.max(0, Math.sin(a.phase * 2)) * 0.016 * a.run * stride
-  const rootY = bob - 0.05 * a.crouch - 0.03 * a.sit - 0.088 * a.loaf - 0.17 * a.swim + 0.035 * a.arch
+  const rootY = (bob - 0.05 * a.crouch - 0.03 * a.sit - 0.088 * a.loaf - 0.17 * a.swim + 0.035 * a.arch) * (1 - post)
   b[0].position.set(r[0].x, r[0].y + rootY, r[0].z)
   const sq = clamp(a.squash, -0.4, 0.4)
-  b[0].scale.set(1 + sq * 0.5, 1 - sq, 1 + sq * 0.5)
+  b[0].scale.set(1 + sq * 0.5, 1 - sq * (1 - post) + sq * 0.5 * post, 1 + sq * 0.5 * (1 - post) - sq * post)
   b[0].rotation.set(0, Math.sin(t * 26) * 0.08 * a.wiggle, Math.sin(t * 40) * 0.28 * a.shake)
 
   // body
@@ -288,7 +294,7 @@ export function poseKitten(rig, a) {
   const gallop = Math.sin(a.phase + 0.6) * 0.13 * a.run * stride
   b[1].rotation.set(sitTilt + gallop + 0.12 * a.crouch - 0.06 * a.swim, 0, 0)
   const breathe = Math.sin(a.breath) * 0.02 * (0.4 + a.loaf + a.sleep)
-  b[1].scale.set(1 + breathe * 0.5, 1 + breathe + 0.2 * a.arch, 1)
+  b[1].scale.set(1 + breathe * 0.5, 1 + breathe + 0.2 * a.arch, 1 + 0.08 * a.hang)
   b[1].position.set(r[1].x, r[1].y + 0.02 * a.arch, r[1].z)
 
   // legs
@@ -309,7 +315,32 @@ export function poseKitten(rig, a) {
       sy *= 1 - 0.1 * a.sit
     }
     rx += Math.sin(t * 13 + k * 1.6) * 0.65 * a.swim
-    leg.rotation.set(rx, 0, k === 0 ? -0.25 * a.groom : 0)
+    let rz = k === 0 ? -0.25 * a.groom : 0
+    if (post > 0) {
+      // claw over claw: each pair takes turns, the front ones opposite the back
+      const step = Math.sin(a.climb + (k % 2) * Math.PI + (front ? 0 : Math.PI * 0.5))
+      const w = post > 0 ? a.hang / post : 0
+      let hx
+      let hs
+      if (front) {
+        // hanging: arms stretched straight up, paws curled over the rim; clinging: up and into the rope
+        hx = (-1.4 + 0.18 * step) * w + (-1.15 + 0.38 * step) * (1 - w)
+        hs = 1.28 * w + (0.92 + 0.1 * step) * (1 - w)
+      } else {
+        // hanging: legs dangle and kick; clinging: bent, feet in the rope below
+        const kick = Math.sin(t * 2.6 + k * Math.PI) * a.kick
+        hx = (1.4 + 0.5 * kick) * w + (0.95 - 0.35 * step) * (1 - w)
+        hs = (1 - 0.15 * Math.max(0, kick)) * w + 0.86 * (1 - w)
+      }
+      rx = rx * (1 - post) + hx * post
+      sy = sy * (1 - post) + hs * post
+      // a swipe at the feather toy: one front paw lets go and sweeps sideways
+      if (k === 0 && a.bat > 0) {
+        rx = rx * (1 - a.bat) + -1.25 * a.bat
+        rz += 0.95 * a.bat
+      }
+    }
+    leg.rotation.set(rx, 0, rz)
     leg.scale.set(1, Math.max(0.08, sy), 1)
   }
 
@@ -345,11 +376,33 @@ export function poseKitten(rig, a) {
     else rx = rx * (1 - curl) + 0.05 * curl
     rx = rx * (1 - a.tailPuff) + (s === 0 ? -0.15 : 0.02) * a.tailPuff
     rx = rx * (1 - a.swim) + (s === 0 ? -1.5 : 0.04) * a.swim
+    // on the post the tail hangs straight down the spine and swings
+    rx = rx * (1 - post) + (s === 0 ? -1.45 : 0.07) * post
     const wag = Math.sin(t * (3 + a.tailWag * 6) - s * 0.75) * a.tailWag * (0.25 + s * 0.12)
     const rz = wag + a.tailSway * (0.2 + s * 0.08) + (s > 0 ? curl * 0.5 : 0)
     bone.rotation.set(rx, 0, rz)
     bone.scale.set(puff, 1, puff)
   }
+}
+
+// Turn the head toward a point in the world, as far round as a neck goes.
+// Runs after poseKitten and blends over the head it set, so it works in any
+// pose, including nose-up on a post.
+const _inv = new THREE.Matrix4()
+const _to = new THREE.Vector3()
+const _look = new THREE.Quaternion()
+const _still = new THREE.Quaternion()
+export function aimHead(rig, target, amount = 1, reach = 1.7) {
+  const head = rig.bones[BONE.head]
+  const body = rig.bones[BONE.body]
+  body.updateWorldMatrix(true, false)
+  _to.copy(target).applyMatrix4(_inv.copy(body.matrixWorld).invert()).sub(head.position)
+  if (_to.lengthSq() < 1e-8) return
+  _to.normalize()
+  const angle = Z.angleTo(_to)
+  _look.setFromUnitVectors(Z, _to)
+  if (angle > reach) _look.slerp(_still, 1 - reach / angle)
+  head.quaternion.slerp(_look, amount)
 }
 
 // A sitting pose for adoption-card portraits.

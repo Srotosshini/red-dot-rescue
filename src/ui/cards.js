@@ -2,7 +2,8 @@
 // its portrait is rebuilt and photographed on demand: same coat, same eyes,
 // same name, sitting for its polaroid.
 import * as THREE from 'three'
-import { makeGenome, TRAITS, eyeLabel } from '../game/genome.js'
+import { makeGenome, TRAITS } from '../game/genome.js'
+import { strings } from '../strings.js'
 import { buildKitten, poseKitten, portraitPose } from '../game/kitten-model.js'
 import { makeRng } from '../core/rng.js'
 
@@ -117,30 +118,14 @@ export function createPortraits(renderer) {
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 
-// the card itself, as HTML; the photo is filled in when it is ready
+// the card itself, as HTML, like the polaroids on the menu's corkboard: the
+// photo is filled in when it is ready, the name is in marker underneath
 export function polaroid(card, { tilt = 0, big = false } = {}) {
   const trait = TRAITS[card.trait] ?? TRAITS.plain
-  return `<button type="button" class="polaroid${big ? ' big' : ''}" style="--tilt:${tilt.toFixed(1)}deg" data-seed="${card.seed}" data-trait="${esc(card.trait)}">
-    <span class="photo"><img alt="${esc(card.name)}, a ${esc(card.label)} kitten" /></span>
+  return `<span class="polaroid${big ? ' big' : ''}" style="--tilt:${tilt.toFixed(1)}deg" data-seed="${card.seed}" data-trait="${esc(card.trait)}">
+    <span class="photo"><img alt="${esc(strings.system.photo(card.name, card.label))}" /></span>
     <span class="caption"><b>${esc(card.name)}</b><small>${esc(card.label)} · ${esc(trait.name)}</small></span>
-  </button>`
-}
-
-export function cardFacts(card, levels) {
-  const g = makeGenome(card.seed, card.trait)
-  const trait = TRAITS[card.trait] ?? TRAITS.plain
-  const level = levels.find((l) => l.id === card.level)
-  const when = card.at ? new Date(card.at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : ''
-  return [
-    ['Coat', g.label],
-    ['Eyes', eyeLabel(g)],
-    ['Personality', `${trait.name}: ${trait.blurb.toLowerCase()}`],
-    ['Loves', g.loves],
-    ['Afraid of', g.fears],
-    ['Secret talent', g.talent],
-    ['Rescued from', level ? level.name : 'somewhere wet'],
-    ['Adopted', when],
-  ].filter(([, v]) => v)
+  </span>`
 }
 
 export function hydratePhotos(root, portraits) {

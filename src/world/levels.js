@@ -10,6 +10,8 @@
 //          gaps are holes.
 // decor:   no footprint, just there to look at.
 
+import { strings } from '../strings.js'
+
 export const THEMES = {
   backyard: {
     ground: 'grass',
@@ -98,9 +100,9 @@ export const THEMES = {
 export const LEVELS = [
   {
     id: 'backyard',
-    name: 'Backyard',
-    blurb: 'Storm clouds are rolling over the garden, and six kittens are still out playing.',
-    newIdea: 'Lead kittens with the dot. Boxes and naps get in the way.',
+    name: strings.levels.backyard.name,
+    blurb: strings.levels.backyard.blurb,
+    newIdea: strings.levels.backyard.idea,
     theme: 'backyard',
     size: [16, 11],
     time: 150,
@@ -151,9 +153,9 @@ export const LEVELS = [
 
   {
     id: 'rooftops',
-    name: 'Rooftops in the rain',
-    blurb: 'Three wet roofs, two gaps, and a wind that keeps changing its mind.',
-    newIdea: 'Shy and chaotic kittens. Puddles, planks, gusts and a box on a pulley.',
+    name: strings.levels.rooftops.name,
+    blurb: strings.levels.rooftops.blurb,
+    newIdea: strings.levels.rooftops.idea,
     theme: 'rooftops',
     size: [16, 11],
     ground: 'void',
@@ -210,9 +212,9 @@ export const LEVELS = [
 
   {
     id: 'kitchen',
-    name: 'Kitchen at midnight',
-    blurb: 'Everyone is asleep except eight kittens and one very busy robot vacuum.',
-    newIdea: 'Greedy kittens, a vacuum you can ride, and a cup that wants to fall.',
+    name: strings.levels.kitchen.name,
+    blurb: strings.levels.kitchen.blurb,
+    newIdea: strings.levels.kitchen.idea,
     theme: 'kitchen',
     size: [15, 11],
     time: 180,
@@ -264,9 +266,9 @@ export const LEVELS = [
 
   {
     id: 'drain',
-    name: 'Storm drain',
-    blurb: 'Down where the rain goes. It is dark, and the dot is the only light you have.',
-    newIdea: 'Darkness. Follow the meows and the glinting eyes. Boxes float.',
+    name: strings.levels.drain.name,
+    blurb: strings.levels.drain.blurb,
+    newIdea: strings.levels.drain.idea,
     theme: 'drain',
     size: [16, 10],
     time: 180,
@@ -319,9 +321,9 @@ export const LEVELS = [
 
   {
     id: 'shelter',
-    name: 'Shelter finale',
-    blurb: 'The yard is flooding and the shelter door is open. Twelve kittens, every kind of trouble.',
-    newIdea: 'Every trait at once, and the water is rising. Floating boxes become boats.',
+    name: strings.levels.shelter.name,
+    blurb: strings.levels.shelter.blurb,
+    newIdea: strings.levels.shelter.idea,
     theme: 'shelter',
     size: [17, 12],
     time: 210,

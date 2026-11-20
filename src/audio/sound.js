@@ -141,8 +141,8 @@ export class Sound {
     if (!this.ready || this.voices > 6) return
     const ctx = this.ctx
     const t = ctx.currentTime + 0.01
-    const dur = kind === 'mew' ? 0.26 : kind === 'trill' ? 0.42 : 0.5 + Math.random() * 0.25
-    const f0 = (kind === 'mew' ? 820 : 620) * pitch
+    const dur = kind === 'mew' ? 0.26 : kind === 'trill' ? 0.42 : kind === 'mrrp' ? 0.17 : 0.5 + Math.random() * 0.25
+    const f0 = (kind === 'mew' ? 820 : kind === 'mrrp' ? 700 : 620) * pitch
     const osc = ctx.createOscillator()
     osc.type = 'sawtooth'
     const f = osc.frequency
@@ -150,15 +150,21 @@ export class Sound {
       f.setValueAtTime(f0 * 0.68, t)
       f.linearRampToValueAtTime(f0 * 1.06, t + dur * 0.7)
       f.linearRampToValueAtTime(f0 * 0.96, t + dur)
+    } else if (kind === 'mrrp') {
+      // a short rolled chirp, rising: the noise a cat makes when it is mildly interested
+      f.setValueAtTime(f0 * 0.82, t)
+      f.linearRampToValueAtTime(f0 * 1.16, t + dur * 0.8)
+      f.linearRampToValueAtTime(f0 * 1.1, t + dur)
     } else {
       f.setValueAtTime(f0 * 0.8, t)
       f.linearRampToValueAtTime(f0 * 1.24, t + dur * 0.32)
       f.linearRampToValueAtTime(f0 * 0.7, t + dur)
     }
     const lfo = ctx.createOscillator()
-    lfo.frequency.value = kind === 'trill' ? 28 : 6.5
+    const rolled = kind === 'trill' || kind === 'mrrp'
+    lfo.frequency.value = kind === 'mrrp' ? 31 : rolled ? 28 : 6.5
     const lfoGain = ctx.createGain()
-    lfoGain.gain.value = kind === 'trill' ? f0 * 0.07 : f0 * 0.02
+    lfoGain.gain.value = rolled ? f0 * 0.08 : f0 * 0.02
     lfo.connect(lfoGain).connect(f)
     const F1 = this.filter('bandpass', 700, 5)
     F1.frequency.setValueAtTime(650, t)
@@ -171,7 +177,7 @@ export class Sound {
     g1.gain.value = 1.6
     const g2 = ctx.createGain()
     g2.gain.value = 0.9
-    const vol = kind === 'mew' ? 0.38 : 0.5
+    const vol = kind === 'mrrp' ? 0.26 : kind === 'mew' ? 0.38 : 0.5
     const e = this.env(t, 0.05, vol, dur * 0.42, dur * 0.5)
     osc.connect(F1).connect(g1).connect(e)
     osc.connect(F2).connect(g2).connect(e)
@@ -254,6 +260,68 @@ export class Sound {
     lp.frequency.exponentialRampToValueAtTime(110, t + 3.2)
     src.connect(lp).connect(this.env(t, 0.08, 0.7 * power, 3.6, 0.2)).connect(this.sfx)
     if (power > 0.7) this.noise(t, 0.3).connect(this.filter('highpass', 1800, 0.5)).connect(this.env(t, 0.004, 0.35, 0.25)).connect(this.sfx)
+  }
+
+  // ---- the menu's scratching post -------------------------------------------------------
+  // claws raking sisal: a quick run of filtered noise, one burst per claw stroke
+  scrape(x, y, z, dur = 0.5) {
+    if (!this.ready) return
+    const t = this.ctx.currentTime
+    const p = this.pan(x, y, z, false)
+    p.connect(this.sfx)
+    const strokes = Math.max(2, Math.round(dur / 0.07))
+    for (let k = 0; k < strokes; k++) {
+      const at = t + (k * dur) / strokes + Math.random() * 0.015
+      this.noise(at, 0.07, { rate: 0.9 + Math.random() * 0.3 })
+        .connect(this.filter('bandpass', 2000 + Math.random() * 1800, 1.3))
+        .connect(this.env(at, 0.006, 0.1, 0.055))
+        .connect(p)
+    }
+  }
+
+  // landing on the rope: a soft low thump, then the rope creaking under the weight
+  thud(x, y, z) {
+    if (!this.ready) return
+    const ctx = this.ctx
+    const t = ctx.currentTime
+    const p = this.pan(x, y, z, false)
+    p.connect(this.sfx)
+    this.tone(t, 125, { peak: 0.24, decay: 0.16, to: 55, dest: p })
+    this.noise(t, 0.08).connect(this.filter('lowpass', 520, 0.7)).connect(this.env(t, 0.004, 0.16, 0.07)).connect(p)
+    const creak = ctx.createOscillator()
+    creak.type = 'sawtooth'
+    creak.frequency.setValueAtTime(96, t + 0.05)
+    creak.frequency.linearRampToValueAtTime(132, t + 0.22)
+    creak.frequency.linearRampToValueAtTime(104, t + 0.36)
+    const judder = ctx.createOscillator()
+    judder.frequency.value = 23
+    const depth = ctx.createGain()
+    depth.gain.value = 10
+    judder.connect(depth).connect(creak.frequency)
+    creak.connect(this.filter('bandpass', 1100, 9)).connect(this.env(t + 0.05, 0.03, 0.06, 0.28)).connect(p)
+    for (const o of [creak, judder]) {
+      o.start(t + 0.05)
+      o.stop(t + 0.45)
+    }
+  }
+
+  // a kitten saying "mrrp"
+  mrrp(x, y, z, pitch = 1) {
+    this.meow(x, y, z, pitch, 'mrrp')
+  }
+
+  // paper: a few crisp crackles over the softer sound of the sheet moving
+  paper() {
+    if (!this.ready) return
+    const t = this.ctx.currentTime
+    for (let k = 0; k < 5; k++) {
+      const at = t + k * 0.045 + Math.random() * 0.02
+      this.noise(at, 0.05, { rate: 1.2 + Math.random() * 0.6 })
+        .connect(this.filter('highpass', 3200 + Math.random() * 2400, 0.8))
+        .connect(this.env(at, 0.003, 0.07 + Math.random() * 0.05, 0.04))
+        .connect(this.sfx)
+    }
+    this.noise(t, 0.3, { rate: 0.7 }).connect(this.filter('bandpass', 1200, 0.7)).connect(this.env(t, 0.04, 0.05, 0.24)).connect(this.sfx)
   }
 
   // ---- interface ------------------------------------------------------------------------------

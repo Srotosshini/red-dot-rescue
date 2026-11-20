@@ -6,6 +6,8 @@
 import * as THREE from 'three'
 import { clamp, damp } from '../core/mathx.js'
 
+const UP = new THREE.Vector3(0, 1, 0)
+
 function haloTexture() {
   const c = document.createElement('canvas')
   c.width = c.height = 64
@@ -44,8 +46,16 @@ export class Laser {
     this.halo.renderOrder = this.ring.renderOrder = 10
     this.light = new THREE.PointLight('#ff2a3d', 2, 3.5, 2)
     this.light.position.y = 0.35
-    this.group.add(this.dot, this.core, this.halo, this.ring, this.light)
+    // the spot lies flat on whatever it hits: the group turns so its up is
+    // the surface's normal (straight up on the ground, sideways on the post)
+    this.spot = new THREE.Group()
+    this.spot.add(this.dot, this.core, this.halo, this.ring)
+    this.group.add(this.spot, this.light)
     this.group.visible = false
+    this.normal = UP.clone()
+    this.tn = UP.clone()
+    this.haloSize = 1 // the menu shrinks the glow so it stays on a thin post
+    this.snapDist = Infinity // longer jumps are instant, like a real laser
 
     this.active = false
     this.x = 0
@@ -70,11 +80,18 @@ export class Laser {
     this.light.distance = distance
   }
 
+  // how hard the dot itself glows through the bloom (1 is the in-game dot)
+  setGlow(k) {
+    this.dot.material.color.setRGB(9 * k, 0.35 * k, 0.42 * k)
+    this.core.material.color.setRGB(10 * k, 6 * k, 6 * k)
+  }
+
   set(hit) {
     if (hit) {
       this.tx = hit.x
       this.ty = hit.y
       this.tz = hit.z
+      this.tn.copy(hit.n ?? UP)
       this.has = true
     } else this.has = false
   }
@@ -92,8 +109,15 @@ export class Laser {
         this.x = this.tx
         this.y = this.ty
         this.z = this.tz
+        this.normal.copy(this.tn)
         this.history.length = 0
         this.still = 0
+      }
+      if (Math.hypot(this.tx - this.x, this.ty - this.y, this.tz - this.z) > this.snapDist) {
+        this.x = this.tx
+        this.y = this.ty
+        this.z = this.tz
+        this.normal.copy(this.tn)
       }
       this.active = true
       this.offFor = 0
@@ -128,15 +152,20 @@ export class Laser {
     // a real laser pointer never holds perfectly still
     const jx = Math.sin(this.t * 37) * 0.004 + Math.sin(this.t * 23 + 1) * 0.003
     const jz = Math.cos(this.t * 31) * 0.004
+    this.normal.lerp(this.tn, 1 - Math.exp(-30 * dt))
+    if (this.normal.lengthSq() < 1e-6) this.normal.copy(this.tn)
+    this.normal.normalize()
     this.group.visible = true
-    this.group.position.set(this.x + jx, this.y + 0.012, this.z + jz)
+    this.group.quaternion.setFromUnitVectors(UP, this.normal)
+    this.group.position.set(this.x, this.y, this.z).addScaledVector(this.normal, 0.012)
+    this.spot.position.set(jx, 0, jz)
     const flick = 1 + Math.sin(this.t * 50) * 0.04 + Math.sin(this.t * 13) * 0.03
     this.dot.scale.setScalar(flick)
-    this.halo.scale.setScalar(1 + Math.sin(this.t * 6) * 0.06 + this.wiggle * 0.3)
+    this.halo.scale.setScalar((1 + Math.sin(this.t * 6) * 0.06 + this.wiggle * 0.3) * this.haloSize)
     this.light.intensity = this.baseLight * (0.92 + Math.sin(this.t * 40) * 0.05)
     this.focus = damp(this.focus, 0, 3, dt)
     this.ring.material.opacity = this.focus * 0.8
-    this.ring.scale.setScalar(1 + (1 - this.focus) * 0.8)
+    this.ring.scale.setScalar((1 + (1 - this.focus) * 0.8) * this.haloSize)
   }
 
   ping() {

@@ -2,44 +2,20 @@
 // eyes, proportions, voice, name and the lines on its adoption card. The trait
 // (shy, greedy...) comes from the level, because traits are the puzzle.
 import { makeRng } from '../core/rng.js'
+import { strings } from '../strings.js'
 
-export const TRAITS = {
-  plain: {
-    name: 'Curious',
-    blurb: 'Chases the dot wherever it goes.',
-    tip: 'Curious kittens follow the dot. Lead them home.',
-  },
-  shy: {
-    name: 'Shy',
-    blurb: 'Keeps its distance and only creeps forward when the dot is far away.',
-    tip: 'Shy kittens keep their distance. Shine the dot past them, then further on. Near the basket they walk in by themselves.',
-  },
-  greedy: {
-    name: 'Greedy',
-    blurb: 'Drops everything for food, including you.',
-    tip: 'Greedy kittens run to any food they see. The bowl by the basket works on them too.',
-  },
-  chaotic: {
-    name: 'Chaotic',
-    blurb: 'Overshoots the dot and pounces at nothing.',
-    tip: 'Chaotic kittens pounce past the dot. Give them room.',
-  },
-  sleepy: {
-    name: 'Sleepy',
-    blurb: 'Naps whenever the dot stops moving.',
-    tip: 'Sleepy kittens nap when the dot stops. Wiggle the dot on one to wake it.',
-  },
-}
+// the kinds of kitten; their names, blurbs and tips are in strings.js
+export const TRAITS = strings.traits
 
 const COATS = {
-  ginger: { base: '#e3893f', dark: '#b4592a', light: '#f5c38f', label: 'ginger' },
-  cream: { base: '#eccb98', dark: '#c99b62', light: '#f8e6c8', label: 'cream' },
-  grey: { base: '#8a94a1', dark: '#59616d', light: '#bcc4ce', label: 'grey' },
-  black: { base: '#2c2a31', dark: '#1a191e', light: '#4b4751', label: 'black' },
-  brown: { base: '#94704f', dark: '#5a3f2d', light: '#c9a37d', label: 'brown' },
-  white: { base: '#f1ede4', dark: '#d8d0c3', light: '#ffffff', label: 'white' },
-  chocolate: { base: '#6c4838', dark: '#452c22', light: '#94705a', label: 'chocolate' },
-  silver: { base: '#c2c6cc', dark: '#676c75', light: '#e5e8eb', label: 'silver' },
+  ginger: { base: '#e3893f', dark: '#b4592a', light: '#f5c38f', label: strings.kittens.coats.ginger },
+  cream: { base: '#eccb98', dark: '#c99b62', light: '#f8e6c8', label: strings.kittens.coats.cream },
+  grey: { base: '#8a94a1', dark: '#59616d', light: '#bcc4ce', label: strings.kittens.coats.grey },
+  black: { base: '#2c2a31', dark: '#1a191e', light: '#4b4751', label: strings.kittens.coats.black },
+  brown: { base: '#94704f', dark: '#5a3f2d', light: '#c9a37d', label: strings.kittens.coats.brown },
+  white: { base: '#f1ede4', dark: '#d8d0c3', light: '#ffffff', label: strings.kittens.coats.white },
+  chocolate: { base: '#6c4838', dark: '#452c22', light: '#94705a', label: strings.kittens.coats.chocolate },
+  silver: { base: '#c2c6cc', dark: '#676c75', light: '#e5e8eb', label: strings.kittens.coats.silver },
 }
 
 const PATTERNS = [
@@ -54,39 +30,19 @@ const PATTERNS = [
 ]
 
 const EYES = [
-  { label: 'green', color: '#7ccc5c' },
-  { label: 'amber', color: '#f2b13a' },
-  { label: 'copper', color: '#e57a2c' },
-  { label: 'gold', color: '#ffd545' },
-  { label: 'hazel', color: '#b8a64a' },
-  { label: 'blue', color: '#5fb2f2' },
+  { label: strings.kittens.eyes[0], color: '#7ccc5c' },
+  { label: strings.kittens.eyes[1], color: '#f2b13a' },
+  { label: strings.kittens.eyes[2], color: '#e57a2c' },
+  { label: strings.kittens.eyes[3], color: '#ffd545' },
+  { label: strings.kittens.eyes[4], color: '#b8a64a' },
+  { label: strings.kittens.eyes[5], color: '#5fb2f2' },
 ]
 
-const NAMES = [
-  'Mochi', 'Biscuit', 'Pepper', 'Noodle', 'Tofu', 'Pickle', 'Waffles', 'Bean', 'Sprout', 'Clementine',
-  'Pumpkin', 'Dumpling', 'Miso', 'Olive', 'Marble', 'Socks', 'Pixel', 'Nugget', 'Juniper', 'Toast',
-  'Button', 'Fig', 'Wasabi', 'Comet', 'Tater', 'Peanut', 'Sesame', 'Ziggy', 'Hazel', 'Pudding',
-  'Basil', 'Maple', 'Ollie', 'Luna', 'Kiwi', 'Ravioli', 'Gnocchi', 'Bao', 'Crumpet', 'Muffin',
-  'Scone', 'Toffee', 'Poppy', 'Chai', 'Cocoa', 'Taco', 'Pretzel', 'Sardine', 'Moth', 'Velcro',
-  'Puddle', 'Bramble', 'Tinsel', 'Custard', 'Dorito', 'Gremlin', 'Pebble', 'Sock Puppet', 'Turnip', 'Wobble',
-  'Lentil', 'Snickerdoodle', 'Admiral', 'Professor', 'Bug', 'Cricket', 'Pistachio', 'Kumquat', 'Mango', 'Radish',
-  'Inkblot', 'Flapjack', 'Sushi', 'Tamale', 'Hiccup', 'Zucchini', 'Beans', 'Nacho', 'Plum', 'Rascal',
-]
+const NAMES = strings.kittens.names
 
-const LOVES = [
-  'cardboard boxes', 'sunbeams', 'the sound of a can opening', 'yarn it is not allowed to have', 'bottle caps',
-  'sitting on homework', 'warm laundry', 'the top of the fridge', 'paper bags', 'shoelaces', 'boxes too small for it',
-  'chasing its own tail', 'being carried like a baby', 'crinkly wrappers', 'the bathroom tap', 'bread',
-]
-const FEARS = [
-  'the vacuum', 'cucumbers', 'its own reflection', 'the doorbell', 'balloons', 'tin foil', 'Tuesdays',
-  'the hairdryer', 'sneezes', 'an empty bowl', 'the blender', 'umbrellas opening',
-]
-const TALENTS = [
-  'opening cupboards', 'knocking things off tables, precisely', 'loafing for hours', 'yelling at birds',
-  'finding the one warm spot', 'fitting through tiny gaps', 'purring on command', 'stealing socks',
-  'turning off laptops', 'fetching hair ties', 'sleeping in impossible positions', 'judging you silently',
-]
+const LOVES = strings.kittens.loves
+const FEARS = strings.kittens.fears
+const TALENTS = strings.kittens.talents
 
 function weighted(rng, list) {
   const total = list.reduce((s, x) => s + x.weight, 0)
@@ -112,29 +68,29 @@ export function makeGenome(seed, trait = 'plain', avoidNames = new Set()) {
       label = coat.label
       break
     case 'tabby':
-      label = `${coat.label} tabby`
+      label = strings.kittens.patterns.tabby(coat.label)
       break
     case 'tuxedo':
-      label = coatId === 'black' ? 'tuxedo' : `${coat.label} tuxedo`
+      label = coatId === 'black' ? strings.kittens.patterns.tuxedo : strings.kittens.patterns.colouredTuxedo(coat.label)
       break
     case 'calico':
-      label = 'calico'
+      label = strings.kittens.patterns.calico
       break
     case 'tortie':
-      label = 'tortoiseshell'
+      label = strings.kittens.patterns.tortie
       colours.base = '#2c2a31'
       break
     case 'point': {
       const seal = rng.chance(0.6)
       colours.points = seal ? '#5a4031' : '#6d7480'
-      label = seal ? 'seal colorpoint' : 'blue colorpoint'
+      label = seal ? strings.kittens.patterns.seal : strings.kittens.patterns.blue
       break
     }
     case 'bicolor':
-      label = `${coat.label} and white`
+      label = strings.kittens.patterns.bicolor(coat.label)
       break
     case 'spotted':
-      label = `spotted ${coat.label}`
+      label = strings.kittens.patterns.spotted(coat.label)
       break
   }
 
@@ -168,5 +124,5 @@ export function makeGenome(seed, trait = 'plain', avoidNames = new Set()) {
 }
 
 export function eyeLabel(g) {
-  return g.eyes.label === 'odd' ? 'odd eyes, one blue and one amber' : `${g.eyes.label} eyes`
+  return g.eyes.label === 'odd' ? strings.kittens.oddEyes : g.eyes.label
 }

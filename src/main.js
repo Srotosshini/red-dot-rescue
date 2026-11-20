@@ -1,4 +1,8 @@
 // Red Dot Rescue: boot, input, menus, the loop.
+// the two hands: marker handwriting and a typewriter mono, served with the game
+import '@fontsource/gochi-hand/latin-400.css'
+import '@fontsource/ibm-plex-mono/latin-400.css'
+import '@fontsource/ibm-plex-mono/latin-500.css'
 import { createStage, guessQuality } from './render/stage.js'
 import { DioramaCamera } from './render/camera.js'
 import { Sound } from './audio/sound.js'
@@ -7,18 +11,24 @@ import { createUI } from './ui/ui.js'
 import { createPortraits } from './ui/cards.js'
 import { loadSave, writeSave } from './ui/save.js'
 import { LEVELS, DEMO } from './world/levels.js'
+import { Menu } from './menu/menu.js'
+import { fontsReady } from './menu/paper.js'
+import { strings } from './strings.js'
 
 const canvas = document.querySelector('#game')
 const root = document.querySelector('#ui')
 const save = loadSave()
 const persist = () => writeSave(save)
+// index.html carries copies of these for browsers without JavaScript
+document.title = strings.title
+canvas.setAttribute('aria-label', strings.system.canvas)
 
 let stage
 try {
   stage = createStage(canvas)
 } catch (error) {
   console.error(error)
-  root.innerHTML = '<p class="noscript">Red Dot Rescue needs WebGL, and this browser could not start it.</p>'
+  root.innerHTML = `<p class="noscript">${strings.system.noWebgl}</p>`
   throw error
 }
 
@@ -30,6 +40,7 @@ const sound = new Sound(save.settings)
 const portraits = createPortraits(stage.renderer)
 
 let game = null
+let menu = null
 const click = () => sound.ui('click')
 
 function openLevel(id) {
@@ -40,27 +51,33 @@ function openLevel(id) {
   ui.show('intro')
 }
 
-function goTitle() {
-  game.load(DEMO.level, { demo: true })
-  ui.show('title')
+// the backyard with the scratching post in it
+function goMenu() {
+  game.load(DEMO.level, { menu: true })
+  menu.enter()
+  ui.show('menu')
 }
 
+// a quick fade through dark around a scene change
+let fading = false
+function fade(change) {
+  if (fading) return
+  if (cam.reduced) return change()
+  fading = true
+  ui.curtain(true)
+  setTimeout(() => {
+    change()
+    fading = false
+    reveal()
+  }, 280)
+}
+// lift the curtain once the new scene has had a frame to draw
+const reveal = () => setTimeout(() => ui.curtain(false), 60)
+
 const handlers = {
-  play() {
-    click()
-    ui.show('levels')
-  },
-  cards() {
-    click()
-    ui.show('cards')
-  },
-  howto() {
-    click()
-    ui.show('howto')
-  },
   title() {
     click()
-    goTitle()
+    fade(goMenu)
   },
   levels() {
     click()
@@ -116,9 +133,35 @@ game.onResults = (r) => {
   ui.results(r)
   ui.show('results')
 }
-stage.onDowngrade((q) => ui.toast(q === 'low' ? 'Effects turned down to keep things smooth.' : 'Some effects turned down to keep things smooth.'))
+menu = new Menu({
+  stage,
+  sound,
+  save,
+  persist,
+  ui,
+  portraits,
+  gameCamera: cam.camera,
+  getGrid: () => game.grid,
+  // after the dive into the box: straight into the first rescue on a first
+  // visit, the level list once any rescue has been passed
+  onPlay() {
+    const fresh = !LEVELS.some((L) => (save.levels[L.id]?.stars ?? 0) > 0)
+    menu.exit()
+    if (fresh) openLevel(LEVELS[0].id)
+    else {
+      game.load(DEMO.level, { demo: true })
+      ui.show('levels')
+    }
+    reveal()
+  },
+  onToggle: (key) => handlers.toggle(key),
+})
+menu.reduced = cam.reduced
+// paper drawn before the handwriting font arrived gets drawn again
+fontsReady.then(() => menu.set?.redrawPaper())
+stage.onDowngrade((q) => ui.toast(q === 'low' ? strings.system.effectsLow : strings.system.effectsSome))
 // a handle for poking at things from the console while developing
-if (import.meta.env.DEV) window.__rdr = { game, cam, stage, ui, sound, save }
+if (import.meta.env.DEV) window.__rdr = { game, cam, stage, ui, sound, save, menu }
 
 // ---- input ------------------------------------------------------------------------------
 // Mouse: hover is the laser, right or middle drag tilts the view, wheel zooms.
@@ -143,6 +186,10 @@ function twoFingers() {
 
 canvas.addEventListener('pointerdown', (e) => {
   sound.unlock()
+  if (menu.active) {
+    if (e.button === 0) menu.press(e.clientX, e.clientY, e.pointerType)
+    return
+  }
   if (e.pointerType === 'touch') {
     touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
     canvas.setPointerCapture?.(e.pointerId)
@@ -162,6 +209,11 @@ canvas.addEventListener('pointerdown', (e) => {
 })
 
 canvas.addEventListener('pointermove', (e) => {
+  if (menu.active) {
+    // a finger only aims when it taps; a mouse aims as it moves
+    if (e.pointerType !== 'touch') menu.aim(e.clientX, e.clientY, e.pointerType)
+    return
+  }
   if (e.pointerType === 'touch') {
     if (!touches.has(e.pointerId)) return
     touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
@@ -182,6 +234,10 @@ canvas.addEventListener('pointermove', (e) => {
 })
 
 const lift = (e) => {
+  if (menu.active) {
+    if (e.type === 'pointerup') menu.release(e.clientX, e.clientY, e.pointerType)
+    return
+  }
   if (e.pointerType === 'touch') {
     touches.delete(e.pointerId)
     if (touches.size < 2) pinch = null
@@ -193,6 +249,7 @@ const lift = (e) => {
 canvas.addEventListener('pointerup', lift)
 canvas.addEventListener('pointercancel', lift)
 canvas.addEventListener('pointerleave', (e) => {
+  if (menu.active) return menu.leave()
   if (e.pointerType === 'mouse' && !orbit) game.pointer.active = false
 })
 canvas.addEventListener('contextmenu', (e) => e.preventDefault())
@@ -200,7 +257,7 @@ canvas.addEventListener(
   'wheel',
   (e) => {
     e.preventDefault()
-    cam.zoomBy(e.deltaY > 0 ? 1.07 : 1 / 1.07)
+    if (!menu.active) cam.zoomBy(e.deltaY > 0 ? 1.07 : 1 / 1.07)
   },
   { passive: false },
 )
@@ -212,10 +269,14 @@ const KEYS = {
 }
 addEventListener('keydown', (e) => {
   sound.unlock()
+  if (menu.active) {
+    if (menu.key(e)) e.preventDefault()
+    return
+  }
   if (e.key === 'Escape' || e.code === 'KeyP') {
-    if (ui.detailOpen) ui.hideDetail()
-    else if (ui.screen === 'play') handlers.pause()
+    if (ui.screen === 'play') handlers.pause()
     else if (ui.screen === 'pause') handlers.resume()
+    else if (ui.screen === 'levels' && e.key === 'Escape') handlers.title()
     return
   }
   if (ui.screen !== 'play') return
@@ -248,18 +309,22 @@ addEventListener('pointerdown', () => sound.unlock(), { once: true, capture: tru
 // ---- size and loop ------------------------------------------------------------------------
 function resize() {
   stage.resize(innerWidth, innerHeight)
-  cam.setAspect(innerWidth / innerHeight)
+  // a hidden page can report a 0 by 0 window
+  const aspect = innerWidth > 0 && innerHeight > 0 ? innerWidth / innerHeight : 1
+  cam.setAspect(aspect)
+  menu.setAspect(aspect)
 }
 addEventListener('resize', resize)
 resize()
-goTitle()
+goMenu()
 
 let last = performance.now()
 stage.renderer.setAnimationLoop((now) => {
   const dt = Math.min(0.05, Math.max(0, (now - last) / 1000))
   last = now
   game.update(dt)
-  game.frameUI(dt)
+  if (menu.active) menu.update(dt)
+  else game.frameUI(dt)
   stage.render(now / 1000)
-  stage.watchFrames(dt, game.state === 'playing' || game.state === 'demo')
+  stage.watchFrames(dt, menu.active || game.state === 'playing' || game.state === 'demo')
 })
